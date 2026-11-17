@@ -27,7 +27,7 @@ public class ShortLinkService {
         this.baseUrl = baseUrl.replaceAll("/+$", "");
     }
 
-    public CreatedLink create(String rawUrl, String customCode, Instant expiresAt) {
+    public CreatedLink create(String rawUrl, String customCode, Instant expiresAt, String ownerId) {
         String destination = validateAndNormalize(rawUrl);
         if (expiresAt != null && !expiresAt.isAfter(Instant.now())) {
             throw new InvalidLinkException("Expiration must be in the future");
@@ -37,12 +37,12 @@ public class ShortLinkService {
                 throw new InvalidLinkException("Custom codes must be 3–32 letters, numbers, hyphens, or underscores");
             }
             if (repository.existsById(customCode)) throw new CodeAlreadyExistsException(customCode);
-            return persist(customCode, destination, expiresAt);
+            return persist(customCode, destination, expiresAt, ownerId);
         }
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
             String code = randomCode();
             try {
-                return persist(code, destination, expiresAt);
+                return persist(code, destination, expiresAt, ownerId);
             } catch (DataIntegrityViolationException collision) {
                 if (repository.existsById(code)) continue;
                 throw collision;
@@ -52,8 +52,8 @@ public class ShortLinkService {
     }
 
     @Transactional
-    public CreatedLink persist(String code, String destination, Instant expiresAt) {
-        repository.saveAndFlush(new ShortLink(code, destination, expiresAt));
+    public CreatedLink persist(String code, String destination, Instant expiresAt, String ownerId) {
+        repository.saveAndFlush(new ShortLink(code, destination, expiresAt, ownerId));
         return new CreatedLink(code, baseUrl + "/" + code, destination, expiresAt);
     }
 
@@ -69,13 +69,18 @@ public class ShortLinkService {
     }
 
     @Transactional
-    public boolean deactivate(String code) {
-        return repository.findById(code).map(link -> {
+    public boolean deactivate(String code, String ownerId) {
+        return repository.findById(code).filter(link -> ownerId.equals(link.getOwnerId())).map(link -> {
             link.deactivate();
             repository.save(link);
             cache.evict(code);
             return true;
         }).orElse(false);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isOwnedBy(String code, String ownerId) {
+        return repository.findById(code).map(link -> ownerId.equals(link.getOwnerId())).orElse(false);
     }
 
     private String validateAndNormalize(String rawUrl) {

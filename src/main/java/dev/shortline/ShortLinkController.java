@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.net.URI;
+import java.security.Principal;
 import java.time.Instant;
 import java.util.concurrent.RejectedExecutionException;
 import org.springframework.http.HttpHeaders;
@@ -34,8 +35,8 @@ public class ShortLinkController {
     }
 
     @PostMapping("/api/v1/links")
-    public ResponseEntity<CreatedLinkResponse> create(@Valid @RequestBody CreateLinkRequest request) {
-        var created = service.create(request.url(), request.customCode(), request.expiresAt());
+    public ResponseEntity<CreatedLinkResponse> create(@Valid @RequestBody CreateLinkRequest request, Principal principal) {
+        var created = service.create(request.url(), request.customCode(), request.expiresAt(), principal.getName());
         return ResponseEntity.status(HttpStatus.CREATED).body(new CreatedLinkResponse(
                 created.code(), created.shortUrl(), created.destinationUrl(), created.expiresAt()));
     }
@@ -64,13 +65,13 @@ public class ShortLinkController {
     }
 
     @DeleteMapping("/api/v1/links/{code}")
-    public ResponseEntity<Void> deactivate(@PathVariable String code) {
-        return service.deactivate(code) ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+    public ResponseEntity<Void> deactivate(@PathVariable String code, Principal principal) {
+        return service.deactivate(code, principal.getName()) ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
     }
 
     @GetMapping("/api/v1/links/{code}/analytics")
-    public ResponseEntity<AnalyticsResponse> analytics(@PathVariable String code) {
-        if (service.resolve(code).isEmpty()) return ResponseEntity.notFound().build();
+    public ResponseEntity<AnalyticsResponse> analytics(@PathVariable String code, Principal principal) {
+        if (!service.isOwnedBy(code, principal.getName())) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(new AnalyticsResponse(code, clickEventRepository.countByCode(code)));
     }
 
