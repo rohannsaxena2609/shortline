@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: shortline
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/shortline}
+    username: ${DATABASE_USERNAME:shortline}
+    password: ${DATABASE_PASSWORD:shortline}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+server:
+  port: ${PORT:8080}
+shortline:
+  base-url: ${SHORTLINE_BASE_URL:http://localhost:8080}
