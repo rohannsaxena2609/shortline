@@ -1,5 +1,6 @@
 package dev.shortline;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -11,21 +12,31 @@ import org.springframework.stereotype.Component;
 public class LinkCache {
     private static final Duration DEFAULT_TTL = Duration.ofMinutes(5);
     private final StringRedisTemplate redis;
+    private final MeterRegistry metrics;
 
-    public LinkCache(StringRedisTemplate redis) { this.redis = redis; }
+    public LinkCache(StringRedisTemplate redis, MeterRegistry metrics) {
+        this.redis = redis;
+        this.metrics = metrics;
+    }
 
     public Optional<String> get(String code) {
         try {
-            return Optional.ofNullable(redis.opsForValue().get(key(code)));
+            String value = redis.opsForValue().get(key(code));
+            metrics.counter("shortline.redirect.cache", "result", value == null ? "miss" : "hit").increment();
+            return Optional.ofNullable(value);
         } catch (DataAccessException unavailable) {
+            metrics.counter("shortline.redirect.cache", "result", "error").increment();
             return Optional.empty();
         }
     }
 
     public void put(String code, String destination, Instant expiresAt) {
         try {
-            Duration ttl = expiresAt == null ? DEFAULT_TTL : Duration.between(Instant.now(), expiresAt).compareTo(DEFAULT_TTL) < 0
-                    ? Duration.between(Instant.now(), expiresAt) : DEFAULT_TTL;
+            Duration ttl = DEFAULT_TTL;
+            if (expiresAt != null) {
+                Duration remaining = Duration.between(Instant.now(), expiresAt);
+                if (remaining.compareTo(ttl) < 0) ttl = remaining;
+            }
             if (!ttl.isNegative() && !ttl.isZero()) redis.opsForValue().set(key(code), destination, ttl);
         } catch (DataAccessException ignored) {
             // The database remains authoritative; cache outages must not fail link creation or redirects.
