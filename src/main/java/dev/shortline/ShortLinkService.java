@@ -17,11 +17,13 @@ public class ShortLinkService {
     private static final Pattern VALID_CODE = Pattern.compile("[A-Za-z0-9_-]{3,32}");
     private final SecureRandom random = new SecureRandom();
     private final ShortLinkRepository repository;
+    private final LinkCache cache;
     private final String baseUrl;
 
-    public ShortLinkService(ShortLinkRepository repository,
+    public ShortLinkService(ShortLinkRepository repository, LinkCache cache,
                             @org.springframework.beans.factory.annotation.Value("${shortline.base-url}") String baseUrl) {
         this.repository = repository;
+        this.cache = cache;
         this.baseUrl = baseUrl.replaceAll("/+$", "");
     }
 
@@ -57,8 +59,13 @@ public class ShortLinkService {
 
     @Transactional(readOnly = true)
     public Optional<ResolvedLink> resolve(String code) {
-        return repository.findById(code).map(link -> new ResolvedLink(
-                link.getDestinationUrl(), link.isActive(), link.isExpired(Instant.now()), link.getExpiresAt()));
+        Optional<String> cached = cache.get(code);
+        if (cached.isPresent()) return Optional.of(new ResolvedLink(cached.get(), true, false, null));
+        return repository.findById(code).map(link -> {
+            boolean expired = link.isExpired(Instant.now());
+            if (link.isActive() && !expired) cache.put(code, link.getDestinationUrl(), link.getExpiresAt());
+            return new ResolvedLink(link.getDestinationUrl(), link.isActive(), expired, link.getExpiresAt());
+        });
     }
 
     @Transactional
@@ -66,6 +73,7 @@ public class ShortLinkService {
         return repository.findById(code).map(link -> {
             link.deactivate();
             repository.save(link);
+            cache.evict(code);
             return true;
         }).orElse(false);
     }
