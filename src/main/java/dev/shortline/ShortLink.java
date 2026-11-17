@@ -10,7 +10,7 @@ import java.time.Instant;
 @Table(name = "short_links")
 public class ShortLink {
     @Id
-    @Column(length = 16, nullable = false, updatable = false)
+    @Column(length = 32, nullable = false, updatable = false)
     private String code;
 
     @Column(name = "destination_url", nullable = false, length = 2048)
@@ -19,15 +19,27 @@ public class ShortLink {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
+    @Column(nullable = false)
+    private boolean active;
+
     protected ShortLink() {}
 
-    public ShortLink(String code, String destinationUrl) {
+    public ShortLink(String code, String destinationUrl, Instant expiresAt) {
         this.code = code;
         this.destinationUrl = destinationUrl;
         this.createdAt = Instant.now();
+        this.expiresAt = expiresAt;
+        this.active = true;
     }
 
     public String getCode() { return code; }
     public String getDestinationUrl() { return destinationUrl; }
     public Instant getCreatedAt() { return createdAt; }
+    public Instant getExpiresAt() { return expiresAt; }
+    public boolean isActive() { return active; }
+    public boolean isExpired(Instant now) { return expiresAt != null && !expiresAt.isAfter(now); }
+    public void deactivate() { this.active = false; }
 }
