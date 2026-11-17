@@ -16,10 +16,11 @@ Redirects are expected to outnumber link creation by roughly 100:1. This is an i
 ```mermaid
 flowchart LR
   Client --> API[Spring Boot API]
+  API --> Cache[(Redis)]
   API --> DB[(PostgreSQL)]
 ```
 
-PostgreSQL is currently the source of truth, providing durable mappings and a unique constraint for code allocation. The current implementation uses a modular monolith to keep the first version easy to run and reason about.
+PostgreSQL is the source of truth, providing durable mappings and a unique constraint for code allocation. Redis caches active destinations for up to five minutes, shortened to the link expiry when sooner. If Redis is unavailable, requests fall back to PostgreSQL. The current implementation uses a modular monolith to keep the first version easy to run and reason about.
 
 ## Evolution path
 
@@ -33,10 +34,11 @@ flowchart LR
   Worker --> Analytics[(Aggregates)]
 ```
 
-1. Add Redis-aside caching with expiry-aware TTLs, cache hit/miss metrics, and database fallback.
+1. Add cache hit/miss metrics and cache stampede protection.
 2. Add an asynchronous click-event pipeline so redirect latency does not depend on analytics storage.
 3. Make analytics consumers idempotent because queue delivery may retry.
-4. Add load tests and report measured p50/p95/p99 latency, throughput, and cache hit rate with the test environment recorded.
+4. Add link ownership/authentication, quotas, and abuse controls before exposing creation/deactivation to the public.
+5. Add load tests and report measured p50/p95/p99 latency, throughput, and cache hit rate with the test environment recorded.
 
 ## Key trade-offs
 
