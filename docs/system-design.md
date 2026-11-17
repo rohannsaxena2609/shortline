@@ -29,20 +29,19 @@ flowchart LR
   Visitor --> Redirect[Stateless redirect handler]
   Redirect --> Cache[(Redis: hot code mappings)]
   Cache -->|miss| DB[(PostgreSQL: source of truth)]
-  Redirect -->|async event| Queue[(Event queue)]
+  Redirect -->|bounded async publisher| Queue[(Kafka)]
   Queue --> Worker[Idempotent analytics worker]
   Worker --> Analytics[(Aggregates)]
 ```
 
-1. Add cache hit/miss metrics and cache stampede protection.
-2. Add an asynchronous click-event pipeline so redirect latency does not depend on analytics storage.
-3. Make analytics consumers idempotent because queue delivery may retry.
-4. Add link ownership/authentication, quotas, and abuse controls before exposing creation/deactivation to the public.
-5. Add load tests and report measured p50/p95/p99 latency, throughput, and cache hit rate with the test environment recorded.
+1. Add cache stampede protection.
+2. Add a durable transactional outbox to eliminate the in-process analytics queue loss window.
+3. Add link ownership/authentication, quotas, and abuse controls before exposing creation/deactivation to the public.
+4. Measure p50/p95/p99 latency, throughput, and cache hit rate under representative load.
 
 ## Key trade-offs
 
 - **Code allocation:** random Base62 codes are simple and avoid a central counter. A unique database constraint remains authoritative; collisions are retried a bounded number of times. A range-based distributed ID allocator can reduce write coordination at larger scale, but codes become more predictable.
 - **Redirect status:** use 302 so clients do not permanently cache a destination that may later be disabled or changed.
-- **Consistency:** mapping creation and code uniqueness are durable database operations. Click analytics can be eventually consistent; resolution must check mapping state and expiration.
+- **Consistency:** mapping creation and code uniqueness are durable database operations. Click analytics can be eventually consistent; resolution must check mapping state and expiration. Redirects submit clicks to a bounded in-process queue before Kafka. Queue overload or process shutdown can lose analytics events while redirects remain successful.
 - **Failure behavior:** PostgreSQL is required in this first version. After Redis is added, cache failure should fall back to the database with bounded timeouts and database protection.
