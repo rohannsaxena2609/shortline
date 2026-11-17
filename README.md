@@ -4,8 +4,9 @@ A system-design-focused URL shortener built with Java and Spring Boot. The proje
 
 ## Current scope
 
-- Create short links with generated or custom codes.
+- Create short links with generated seven-character codes.
 - Redirect short codes to validated HTTP(S) destinations.
+- Return a clear `400 Bad Request` for invalid destinations and `404 Not Found` for unknown codes.
 - Persist mappings in PostgreSQL.
 - Keep the codebase modular so Redis caching and asynchronous click analytics can be added as separate steps.
 
@@ -33,6 +34,8 @@ Follow a short link at `http://localhost:8080/{code}`. Redirects return `302 Fou
 The expected workload is read-heavy: redirects should remain fast even when analytics or other noncritical components are slow. The initial version uses PostgreSQL as the source of truth. Planned steps add Redis for hot mappings and a queue-backed analytics pipeline; both will be introduced with explicit failure behavior and measurements.
 
 See [docs/system-design.md](docs/system-design.md) for assumptions, architecture evolution, and design trade-offs.
+
+Custom aliases, link expiration, authentication, caching, and analytics are planned follow-up milestones; they are not implemented yet.
 
 ## API
 
