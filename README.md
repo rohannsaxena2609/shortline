@@ -33,3 +33,12 @@ Follow a short link at `http://localhost:8080/{code}`. Redirects return `302 Fou
 The expected workload is read-heavy: redirects should remain fast even when analytics or other noncritical components are slow. The initial version uses PostgreSQL as the source of truth. Planned steps add Redis for hot mappings and a queue-backed analytics pipeline; both will be introduced with explicit failure behavior and measurements.
 
 See [docs/system-design.md](docs/system-design.md) for assumptions, architecture evolution, and design trade-offs.
+
+## API
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| `POST` | `/api/v1/links` | Create a short link; responds `201 Created` |
+| `GET` | `/{code}` | Redirect with `302 Found`, or `404 Not Found` |
+
+The creation endpoint accepts `{"url":"https://example.com/path"}`. Codes are seven-character Base62 strings. Only absolute HTTP and HTTPS destinations are accepted.
