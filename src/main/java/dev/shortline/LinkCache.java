@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -11,8 +12,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class LinkCache {
     private static final Duration DEFAULT_TTL = Duration.ofMinutes(5);
+    private static final long FAILURE_COOLDOWN_MILLIS = 5_000;
     private final StringRedisTemplate redis;
     private final MeterRegistry metrics;
+    private final AtomicLong unavailableUntil = new AtomicLong();
 
     public LinkCache(StringRedisTemplate redis, MeterRegistry metrics) {
         this.redis = redis;
@@ -20,17 +23,19 @@ public class LinkCache {
     }
 
     public Optional<String> get(String code) {
+        if (isCoolingDown()) return cacheMiss("unavailable");
         try {
             String value = redis.opsForValue().get(key(code));
             metrics.counter("shortline.redirect.cache", "result", value == null ? "miss" : "hit").increment();
             return Optional.ofNullable(value);
         } catch (DataAccessException unavailable) {
-            metrics.counter("shortline.redirect.cache", "result", "error").increment();
-            return Optional.empty();
+            markUnavailable();
+            return cacheMiss("error");
         }
     }
 
     public void put(String code, String destination, Instant expiresAt) {
+        if (isCoolingDown()) return;
         try {
             Duration ttl = DEFAULT_TTL;
             if (expiresAt != null) {
@@ -39,16 +44,28 @@ public class LinkCache {
             }
             if (!ttl.isNegative() && !ttl.isZero()) redis.opsForValue().set(key(code), destination, ttl);
         } catch (DataAccessException ignored) {
-            // The database remains authoritative; cache outages must not fail link creation or redirects.
+            markUnavailable();
         }
     }
 
     public void evict(String code) {
+        if (isCoolingDown()) return;
         try {
             redis.delete(key(code));
         } catch (DataAccessException ignored) {
-            // Stale entries are bounded by the short cache TTL.
+            markUnavailable();
         }
+    }
+
+    private Optional<String> cacheMiss(String result) {
+        metrics.counter("shortline.redirect.cache", "result", result).increment();
+        return Optional.empty();
+    }
+
+    private boolean isCoolingDown() { return System.currentTimeMillis() < unavailableUntil.get(); }
+
+    private void markUnavailable() {
+        unavailableUntil.set(System.currentTimeMillis() + FAILURE_COOLDOWN_MILLIS);
     }
 
     private String key(String code) { return "shortline:link:" + code; }

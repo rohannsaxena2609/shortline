@@ -5,7 +5,7 @@
 - Create a short code for an HTTP(S) destination, optionally accepting a custom code.
 - Resolve a code to its destination and redirect quickly.
 - Reject invalid schemes and duplicate custom codes.
-- Preserve the mapping durably; later support expiration, disabling, and analytics.
+- Preserve the mapping durably; support expiration, deactivation, and analytics.
 
 ## Workload assumptions
 
@@ -20,7 +20,7 @@ flowchart LR
   API --> DB[(PostgreSQL)]
 ```
 
-PostgreSQL is the source of truth, providing durable mappings and a unique constraint for code allocation. Redis caches active destinations for up to five minutes, shortened to the link expiry when sooner. If Redis is unavailable, requests fall back to PostgreSQL. The current implementation uses a modular monolith to keep the first version easy to run and reason about.
+PostgreSQL is the source of truth, providing durable mappings and a unique constraint for code allocation. User accounts store BCrypt password hashes; link creation and owner operations use stateless HTTP Basic authentication. Redirects are public. Deactivation and analytics check that the authenticated account owns the link. Redis caches active destinations for up to five minutes, shortened to the link expiry when sooner. If Redis is unavailable, requests fall back to PostgreSQL. A five-second process-local circuit cooldown skips repeated Redis connection attempts after a failure. The current implementation uses a modular monolith to keep the first version easy to run and reason about.
 
 ## Evolution path
 
@@ -34,14 +34,14 @@ flowchart LR
   Worker --> Analytics[(Aggregates)]
 ```
 
-1. Add cache stampede protection.
+1. Add cache stampede protection for heavily skewed hot keys.
 2. Add a durable transactional outbox to eliminate the in-process analytics queue loss window.
-3. Add link ownership/authentication, quotas, and abuse controls before exposing creation/deactivation to the public.
-4. Measure p50/p95/p99 latency, throughput, and cache hit rate under representative load.
+3. Add registration throttling, password recovery, quotas, and abuse controls before exposing account creation publicly.
+4. Repeat benchmark measurements with more runs and deployment-like network and load conditions.
 
 ## Key trade-offs
 
 - **Code allocation:** random Base62 codes are simple and avoid a central counter. A unique database constraint remains authoritative; collisions are retried a bounded number of times. A range-based distributed ID allocator can reduce write coordination at larger scale, but codes become more predictable.
 - **Redirect status:** use 302 so clients do not permanently cache a destination that may later be disabled or changed.
 - **Consistency:** mapping creation and code uniqueness are durable database operations. Click analytics can be eventually consistent; resolution must check mapping state and expiration. Redirects submit clicks to a bounded in-process queue before Kafka. Queue overload or process shutdown can lose analytics events while redirects remain successful.
-- **Failure behavior:** PostgreSQL is required in this first version. After Redis is added, cache failure should fall back to the database with bounded timeouts and database protection.
+- **Failure behavior:** PostgreSQL is required. Redis failure opens a short process-local cooldown and redirects fall back to PostgreSQL. Kafka publishing runs on a bounded executor; queue overload or process shutdown can lose analytics events, while redirect responses remain independent.

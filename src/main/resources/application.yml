@@ -2,7 +2,7 @@ spring:
   application:
     name: shortline
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/shortline}
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/shortline}
     username: ${DATABASE_USERNAME:shortline}
     password: ${DATABASE_PASSWORD:shortline}
   jpa:
@@ -13,7 +13,8 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      timeout: 250ms
+      timeout: 50ms
+      connect-timeout: 50ms
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
@@ -34,6 +35,9 @@ shortline:
   base-url: ${SHORTLINE_BASE_URL:http://localhost:8080}
 
 management:
+  health:
+    redis:
+      enabled: false
   endpoints:
     web:
       exposure:

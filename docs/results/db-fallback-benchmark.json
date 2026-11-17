@@ -1,0 +1,21 @@
+{
+  "target": "http://127.0.0.1:8080/bench-a4be024b09",
+  "requests": 1000,
+  "concurrency": 32,
+  "elapsed_seconds": 0.382,
+  "throughput_requests_per_second": 2617.07,
+  "latency_ms": {
+    "p50": 9.52,
+    "p95": 26.3,
+    "p99": 41.15,
+    "max": 66.55
+  },
+  "status_counts": {
+    "302": 1000
+  },
+  "environment": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python": "3.15.0",
+    "mode": "single-process local demo; keep-alive; db-fallback; 1 warm-up request"
+  }
+}

@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: shortline
       POSTGRES_PASSWORD: shortline
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - shortline-postgres:/var/lib/postgresql/data
     healthcheck:
